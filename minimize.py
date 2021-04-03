@@ -11,9 +11,11 @@ import tempfile
 import subprocess
 import collections
 
-import util
 import conll
-from bert import tokenization
+from transformers import *
+
+def flatten(l):
+  return [item for sublist in l for item in sublist]
 
 class DocumentState(object):
   def __init__(self, key):
@@ -90,12 +92,12 @@ class DocumentState(object):
       else:
         merged_clusters.append(set(c1))
     merged_clusters = [list(c) for c in merged_clusters]
-    all_mentions = util.flatten(merged_clusters)
+    all_mentions = flatten(merged_clusters)
     sentence_map =  get_sentence_map(self.segments, self.sentence_end)
-    subtoken_map = util.flatten(self.segment_subtoken_map)
+    subtoken_map = flatten(self.segment_subtoken_map)
     assert len(all_mentions) == len(set(all_mentions))
-    num_words =  len(util.flatten(self.segments))
-    assert num_words == len(util.flatten(self.speakers))
+    num_words =  len(flatten(self.segments))
+    assert num_words == len(flatten(self.speakers))
     assert num_words == len(subtoken_map), (num_words, len(subtoken_map))
     assert num_words == len(sentence_map), (num_words, len(sentence_map))
     return {
@@ -215,29 +217,24 @@ def minimize_partition(name, language, extension, labels, stats, tokenizer, seg_
       count += 1
   print("Wrote {} documents to {}".format(count, output_path))
 
-def minimize_language(language, labels, stats, vocab_file, seg_len, input_dir, output_dir, do_lower_case):
-  # do_lower_case = True if 'chinese' in vocab_file else False
-  tokenizer = tokenization.FullTokenizer(
-                vocab_file=vocab_file, do_lower_case=do_lower_case)
+def minimize_language(language, labels, stats, seg_len, input_dir, output_dir):
+  tokenizer = AutoTokenizer.from_pretrained('xlm-roberta-large', do_basic_tokenize=False)
   minimize_partition("dev", language, "v4_gold_conll", labels, stats, tokenizer, seg_len, input_dir, output_dir)
   minimize_partition("train", language, "v4_gold_conll", labels, stats, tokenizer, seg_len, input_dir, output_dir)
   minimize_partition("test", language, "v4_gold_conll", labels, stats, tokenizer, seg_len, input_dir, output_dir)
 
 if __name__ == "__main__":
-  vocab_file = sys.argv[1]
-  input_dir = sys.argv[2]
-  output_dir = sys.argv[3]
-  do_lower_case = sys.argv[4].lower() == 'true'
-  print(do_lower_case)
+  input_dir = sys.argv[1]
+  output_dir = sys.argv[2]
   labels = collections.defaultdict(set)
   stats = collections.defaultdict(int)
   if not os.path.isdir(output_dir):
     os.mkdir(output_dir)
   for seg_len in [128, 256, 384, 512]:
-    minimize_language("english", labels, stats, vocab_file, seg_len, input_dir, output_dir, do_lower_case)
-    # minimize_language("chinese", labels, stats, vocab_file, seg_len)
-    # minimize_language("es", labels, stats, vocab_file, seg_len)
-    # minimize_language("arabic", labels, stats, vocab_file, seg_len)
+    minimize_language("english", labels, stats, seg_len, input_dir, output_dir)
+    # minimize_language("chinese", labels, stats, seg_len)
+    # minimize_language("es", labels, stats, seg_len)
+    # minimize_language("arabic", labels, stats, seg_len)
   for k, v in labels.items():
     print("{} = [{}]".format(k, ", ".join("\"{}\"".format(label) for label in v)))
   for k, v in stats.items():
